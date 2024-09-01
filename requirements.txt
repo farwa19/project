@@ -1,6 +1,5 @@
 geopy
 matplotlib
-os
 streamlit
 scikit-learn
 numpy
