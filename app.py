@@ -44,7 +44,7 @@ def get_recommendations_ml(cat, address):
     recommendations = df_filtered.iloc[indices[0]]
     recommendations_sorted = recommendations.sort_values(by="Distance", ascending=True)
     return recommendations_sorted
-df = pd.read_csv("/kl.csv", encoding='latin-1')
+df = pd.read_csv("kl.csv", encoding='latin-1')
 m = df['Category'].unique()
 st.title("Restaurant Recommendation System")
 st.sidebar.header("Choose a Restaurant Type")
