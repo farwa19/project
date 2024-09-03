@@ -10,7 +10,7 @@ import folium
 import streamlit as st
 from streamlit_folium import st_folium
 # Set up Cohere client
-co = cohere.Client("hQFL74URCQeN4VZYAlbjQESKiQySbSZSgbxvPCRE") 
+co = cohere.Client("jmJBKshr4Zjt9rPD8YEtuhapL2RpgN9z92SIluep") 
 from geopy.geocoders import Nominatim
 st.set_page_config(
     page_title="Restaurant Recommendation System",
