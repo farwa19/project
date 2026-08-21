@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SmartHealth Portal — Symptom Checker &amp; Care Locator</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0A3D3A;        /* deep teal, replaces navy */
+    --ink-soft:#4C6B67;   /* muted teal-slate body text */
+    --teal:#127C7C;       /* trust teal - primary */
+    --teal-deep:#0C5C5C;
+    --teal-bright:#1FA394;
+    --mint:#3F9D82;       /* low severity / reassurance */
+    --amber:#C68A2E;      /* medium severity — kept distinct for clinical clarity */
+    --coral:#D9524A;      /* high severity / urgent — kept distinct for clinical clarity */
+    --paper:#F4FAF9;      /* soft white background, teal-tinted */
+    --paper-2:#E7F3F1;
+    --line:#D2E7E3;
+  }
+  html{scroll-behavior:smooth;}
+  body{font-family:'Inter',ui-sans-serif,system-ui;color:var(--ink-soft);background:var(--paper);
+    cursor:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><g fill="none" stroke="%230A3D3A" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v6.5a4 4 0 0 0 8 0V3"/><path d="M12 13v3.5a5 5 0 0 0 10 0V14"/><circle cx="24.5" cy="14" r="2.3" fill="%23127C7C" stroke="%230A3D3A" stroke-width="1.2"/><circle cx="8" cy="3" r="1.3" fill="%23127C7C"/><circle cx="16" cy="3" r="1.3" fill="%23127C7C"/></g></svg>') 4 4, auto;
+  }
+  a, button, [role="tab"], .chip, input[type="range"]{
+    cursor:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 28 28"><g fill="none" stroke="%230C5C5C" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v6.5a4 4 0 0 0 8 0V3"/><path d="M12 13v3.5a5 5 0 0 0 10 0V14"/><circle cx="24.5" cy="14" r="2.4" fill="%231FA394" stroke="%230C5C5C" stroke-width="1.2"/><circle cx="8" cy="3" r="1.3" fill="%231FA394"/><circle cx="16" cy="3" r="1.3" fill="%231FA394"/></g></svg>') 4 4, pointer;
+  }
+  .font-display{font-family:'Fraunces',serif;}
+  .font-mono{font-family:'IBM Plex Mono',monospace;}
+  .text-ink{color:var(--ink);}
+  .bg-ink{background-color:var(--ink);}
+  .text-teal{color:var(--teal);}
+  .bg-teal{background-color:var(--teal);}
+  .border-line{border-color:var(--line);}
+  .bg-paper2{background-color:var(--paper-2);}
+
+  *:focus-visible{outline:3px solid var(--teal); outline-offset:2px; border-radius:4px;}
+
+  .chip{transition:all .15s ease;}
+  .chip[aria-pressed="true"]{background:var(--teal); color:#fff; border-color:var(--teal);}
+  .chip[aria-pressed="false"]:hover{border-color:var(--teal); color:var(--teal-deep);}
+
+  /* signature element: vitals strip */
+  .vitals-strip{background:var(--ink); overflow:hidden; position:relative;}
+  .vitals-track{display:flex; gap:3.5rem; white-space:nowrap; animation:scroll-left 28s linear infinite;}
+  @media (prefers-reduced-motion: reduce){ .vitals-track{animation:none;} }
+  @keyframes scroll-left{ from{transform:translateX(0);} to{transform:translateX(-50%);} }
+  .pulse-dot{display:inline-block;width:7px;height:7px;border-radius:9999px;background:#4FD1C5;animation:pulse-beat 1.6s ease-in-out infinite;}
+  @keyframes pulse-beat{0%,100%{opacity:.4;transform:scale(.85);}50%{opacity:1;transform:scale(1.15);}}
+  @media (prefers-reduced-motion: reduce){ .pulse-dot{animation:none;opacity:1;} }
+
+  /* severity ECG line */
+  .ecg-wrap{overflow:hidden;}
+  .ecg-line{stroke-dasharray:340;stroke-dashoffset:340;animation:draw 1.1s ease-out forwards;}
+  @keyframes draw{to{stroke-dashoffset:0;}}
+  @media (prefers-reduced-motion: reduce){ .ecg-line{animation:none;stroke-dashoffset:0;} }
+
+  .card-shadow{box-shadow:0 1px 2px rgba(11,59,79,.04), 0 8px 24px -12px rgba(11,59,79,.12);}
+  .tab-btn[aria-selected="true"]{color:var(--ink); border-color:var(--teal);}
+  .tab-btn[aria-selected="false"]{color:#8AA1A6; border-color:transparent;}
+
+  input[type="range"]{accent-color:var(--teal);}
+  ::selection{background:var(--teal); color:#fff;}
+
+  /* ---- Scroll-triggered slide animations ---- */
+  .reveal{opacity:0; transform:translateY(28px); transition:opacity .7s cubic-bezier(.21,.6,.35,1), transform .7s cubic-bezier(.21,.6,.35,1);}
+  .reveal.reveal-left{transform:translateX(-40px);}
+  .reveal.reveal-right{transform:translateX(40px);}
+  .reveal.in-view{opacity:1; transform:translate(0,0);}
+  .reveal-stagger.in-view > *{animation:none;}
+  @media (prefers-reduced-motion: reduce){
+    .reveal, .reveal.reveal-left, .reveal.reveal-right{opacity:1; transform:none; transition:none;}
+  }
+
+  /* ---- Hero banner ---- */
+  .hero-banner{
+    position:relative;
+    overflow:hidden;
+    background:
+      linear-gradient(135deg, rgba(10,61,58,.94) 0%, rgba(18,124,124,.88) 45%, rgba(31,163,148,.82) 100%);
+    isolation:isolate;
+  }
+  .hero-banner::before{
+    content:"";
+    position:absolute; inset:0;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='420' height='420' viewBox='0 0 420 420'><g fill='none' stroke='%23FFFFFF' stroke-width='1' opacity='0.10'><path d='M0 210h60l14-70 20 140 18-100 16 60 14-30h278'/><circle cx='340' cy='70' r='34'/><path d='M340 46v48M316 70h48'/><circle cx='60' cy='340' r='22'/><path d='M60 322v36M42 340h36'/></g></svg>");
+    background-repeat:no-repeat;
+    background-position:right -40px top -20px, left -30px bottom -30px;
+    background-size:520px, 320px;
+    opacity:.55;
+    z-index:0;
+  }
+  .hero-banner::after{
+    content:"";
+    position:absolute; inset:0;
+    background:radial-gradient(ellipse 60% 50% at 50% 0%, rgba(255,255,255,.10), transparent 70%);
+    z-index:0;
+  }
+  .hero-banner > *{position:relative; z-index:1;}
+  .hero-banner-pattern{
+    position:absolute; inset:0; z-index:0;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'><g fill='%23FFFFFF' opacity='0.05'><path d='M56 20h8v18h18v8H64v18h-8V46H38v-8h18z'/></g></svg>");
+    background-size:120px 120px;
+  }
+</style>
+</head>
+<body class="antialiased">
+
+<!-- Skip link -->
+<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:bg-white focus:text-ink focus:px-4 focus:py-2 focus:rounded-md focus:shadow-lg focus:z-50">Skip to main content</a>
+
+<!-- NAV -->
+<header class="sticky top-0 z-40 bg-paper/90 backdrop-blur border-b border-line">
+  <nav class="max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between" aria-label="Primary">
+    <a href="#top" class="flex items-center gap-2.5 group">
+      <span class="relative flex h-8 w-8 items-center justify-center rounded-lg bg-ink">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2v20M2 12h20" stroke="#4FD1C5" stroke-width="2.5" stroke-linecap="round"/></svg>
+      </span>
+      <span class="font-display font-semibold text-lg text-ink tracking-tight">SmartHealth</span>
+    </a>
+    <div class="hidden md:flex items-center gap-8 text-sm font-medium">
+      <a href="#checker" class="text-ink-soft hover:text-teal transition-colors">Symptom Checker</a>
+      <a href="#locator" class="text-ink-soft hover:text-teal transition-colors">Find Care</a>
+      <a href="#dashboard" class="text-ink-soft hover:text-teal transition-colors">My Dashboard</a>
+    </div>
+    <a href="#checker" class="hidden sm:inline-flex items-center rounded-full bg-teal text-white text-sm font-semibold px-4 py-2 hover:bg-[var(--teal-deep)] transition-colors">Check symptoms</a>
+  </nav>
+</header>
+
+<main id="main">
+
+  <!-- WELCOME / MAIN HERO BANNER -->
+  <section class="hero-banner">
+    <div class="hero-banner-pattern" aria-hidden="true"></div>
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-20 sm:py-28 lg:py-32 text-center flex flex-col items-center">
+      <div class="reveal inline-flex items-center gap-2 rounded-full bg-white/10 border border-white/20 px-4 py-1.5 text-white/90 text-xs font-mono tracking-widest uppercase mb-6 backdrop-blur-sm">
+        <span class="pulse-dot"></span> Home healthcare, made simple
+      </div>
+      <h1 class="reveal font-display text-4xl sm:text-5xl lg:text-6xl leading-[1.08] text-white font-semibold tracking-tight max-w-3xl" style="transition-delay:.08s">
+        Care that meets you where you are.
+      </h1>
+      <p class="reveal mt-6 text-base sm:text-lg text-white/85 max-w-xl" style="transition-delay:.16s">
+        From your first symptom to the right clinic nearby — SmartHealth guides you through it, one clear step at a time.
+      </p>
+      <div class="reveal mt-9 flex flex-wrap justify-center gap-3" style="transition-delay:.24s">
+        <a href="#checker" class="inline-flex items-center gap-2 rounded-full bg-white text-[var(--teal-deep)] font-semibold px-7 py-3.5 hover:bg-[var(--paper-2)] transition-colors shadow-lg shadow-black/10">
+          Let's get started
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="#locator" class="inline-flex items-center gap-2 rounded-full border-2 border-white/40 text-white font-semibold px-7 py-3.5 hover:bg-white/10 hover:border-white/70 transition-colors">
+          Find nearby care
+        </a>
+      </div>
+      <div class="reveal mt-14 grid grid-cols-3 gap-6 sm:gap-14 text-white/90" style="transition-delay:.32s">
+        <div>
+          <p class="font-display text-2xl sm:text-3xl font-semibold text-white">28+</p>
+          <p class="mt-1 text-xs sm:text-sm text-white/70">Hospitals in network</p>
+        </div>
+        <div>
+          <p class="font-display text-2xl sm:text-3xl font-semibold text-white">47 sec</p>
+          <p class="mt-1 text-xs sm:text-sm text-white/70">Avg. time to guidance</p>
+        </div>
+        <div>
+          <p class="font-display text-2xl sm:text-3xl font-semibold text-white">2,140</p>
+          <p class="mt-1 text-xs sm:text-sm text-white/70">Self-checks today</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HERO -->
+  <section id="top" class="relative">
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 pt-14 pb-10 grid lg:grid-cols-2 gap-10 items-center">
+      <div class="reveal reveal-left">
+        <p class="font-mono text-xs tracking-widest text-teal uppercase mb-4 flex items-center gap-2">
+          <span class="pulse-dot"></span> Preliminary guidance, not a diagnosis
+        </p>
+        <h2 class="font-display text-4xl sm:text-5xl leading-[1.08] text-ink font-semibold tracking-tight">
+          What you feel first,<br class="hidden sm:block"> before you know what it is.
+        </h2>
+        <p class="mt-5 text-base sm:text-lg text-ink-soft max-w-lg">
+          Tell us what's going on. We'll surface likely explanations, safe first steps to try at home, and — when it matters — exactly who nearby can see you next.
+        </p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href="#checker" class="inline-flex items-center gap-2 rounded-full bg-ink text-white font-semibold px-6 py-3.5 hover:bg-[var(--teal-deep)] transition-colors">
+            Check symptoms now
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+          <a href="#locator" class="inline-flex items-center gap-2 rounded-full border-2 border-line text-ink font-semibold px-6 py-3.5 hover:border-teal hover:text-teal transition-colors">
+            Find nearby care
+          </a>
+        </div>
+      </div>
+
+      <!-- Live mini symptom starter -->
+      <div class="reveal reveal-right card-shadow bg-white rounded-2xl border border-line p-6 sm:p-7" style="transition-delay:.1s">
+        <p class="text-xs font-semibold text-ink-soft uppercase tracking-wide mb-3">Quick start — what's bothering you?</p>
+        <div id="hero-chip-row" class="flex flex-wrap gap-2" role="group" aria-label="Quick symptom picks">
+          <!-- chips injected by JS, mirrors full checker -->
+        </div>
+        <button id="hero-continue" class="mt-5 w-full rounded-xl bg-teal text-white font-semibold py-3 hover:bg-[var(--teal-deep)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+          Continue to full check →
+        </button>
+        <p class="mt-3 text-xs text-ink-soft">Selections carry over into the checker below.</p>
+      </div>
+    </div>
+
+    <!-- Signature: vitals strip -->
+    <div class="vitals-strip py-2.5" aria-hidden="true">
+      <div class="vitals-track font-mono text-xs text-white/70 tracking-wide">
+        <span>HRV &nbsp;62ms &nbsp;<span class="text-[#4FD1C5]">▲ stable</span></span>
+        <span>2,140 self-checks completed today</span>
+        <span>SPO₂ &nbsp;98% &nbsp;<span class="text-[#4FD1C5]">normal range</span></span>
+        <span>318 clinics in network</span>
+        <span>Avg. time to guidance: 47 sec</span>
+        <span>RESP &nbsp;16/min &nbsp;<span class="text-[#4FD1C5]">normal range</span></span>
+        <span>HRV &nbsp;62ms &nbsp;<span class="text-[#4FD1C5]">▲ stable</span></span>
+        <span>2,140 self-checks completed today</span>
+        <span>SPO₂ &nbsp;98% &nbsp;<span class="text-[#4FD1C5]">normal range</span></span>
+        <span>318 clinics in network</span>
+        <span>Avg. time to guidance: 47 sec</span>
+        <span>RESP &nbsp;16/min &nbsp;<span class="text-[#4FD1C5]">normal range</span></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- SYMPTOM CHECKER -->
+  <section id="checker" class="max-w-7xl mx-auto px-5 sm:px-8 py-16 sm:py-20">
+    <div class="reveal max-w-2xl mb-10">
+      <p class="font-mono text-xs tracking-widest text-teal uppercase mb-3">01 — Symptom Checker</p>
+      <h2 class="font-display text-3xl sm:text-4xl text-ink font-semibold tracking-tight">Describe how you feel</h2>
+      <p class="mt-3 text-ink-soft">Select every symptom that applies, add anything specific in your own words, then run the check. Results are generated instantly from your inputs.</p>
+    </div>
+
+    <div class="grid lg:grid-cols-5 gap-8">
+      <!-- form -->
+      <div class="reveal reveal-left lg:col-span-2 bg-white rounded-2xl border border-line p-6 sm:p-7 card-shadow h-fit">
+        <fieldset>
+          <legend class="text-sm font-semibold text-ink mb-3">Common symptoms</legend>
+          <div id="symptom-chips" class="flex flex-wrap gap-2" role="group" aria-label="Symptom selection"></div>
+        </fieldset>
+
+        <div class="mt-6">
+          <label for="symptom-free-text" class="block text-sm font-semibold text-ink mb-2">Anything else to add? <span class="font-normal text-ink-soft">(optional)</span></label>
+          <textarea id="symptom-free-text" rows="3" placeholder="e.g. started two days ago, worse at night…" class="w-full rounded-xl border border-line px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:border-teal"></textarea>
+        </div>
+
+        <div class="mt-6">
+          <label for="symptom-duration" class="block text-sm font-semibold text-ink mb-2">How long has this been going on?</label>
+          <select id="symptom-duration" class="w-full rounded-xl border border-line px-3.5 py-2.5 text-sm text-ink focus:outline-none focus:border-teal bg-white">
+            <option>Less than a day</option>
+            <option>1–3 days</option>
+            <option>4–7 days</option>
+            <option>More than a week</option>
+          </select>
+        </div>
+
+        <button id="analyze-btn" class="mt-7 w-full rounded-xl bg-ink text-white font-semibold py-3.5 hover:bg-[var(--teal-deep)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+          Analyze symptoms
+        </button>
+        <p class="mt-3 text-xs text-ink-soft leading-relaxed">This tool offers general information only and does not replace professional medical evaluation.</p>
+      </div>
+
+      <!-- results -->
+      <div class="reveal reveal-right lg:col-span-3" style="transition-delay:.1s">
+        <div id="results-empty" class="h-full min-h-[320px] flex flex-col items-center justify-center text-center rounded-2xl border-2 border-dashed border-line p-10">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" class="mb-4 text-line"><path d="M12 2v6M12 16v6M4.9 4.9l4.2 4.2M14.9 14.9l4.2 4.2M2 12h6M16 12h6M4.9 19.1l4.2-4.2M14.9 9.1l4.2-4.2" stroke="#B9CFCC" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <p class="font-display text-lg text-ink font-medium">Your results will appear here</p>
+          <p class="mt-1.5 text-sm text-ink-soft max-w-xs">Pick a few symptoms on the left and select <span class="font-medium text-ink">Analyze symptoms</span> to get started.</p>
+        </div>
+        <div id="results-container" class="hidden space-y-5" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOCATOR -->
+  <section id="locator" class="bg-paper2 border-y border-line">
+    <div class="max-w-7xl mx-auto px-5 sm:px-8 py-16 sm:py-20">
+      <div class="reveal max-w-2xl mb-10">
+        <p class="font-mono text-xs tracking-widest text-teal uppercase mb-3">02 — Care Locator</p>
+        <h2 class="font-display text-3xl sm:text-4xl text-ink font-semibold tracking-tight">Find care near you</h2>
+        <p class="mt-3 text-ink-soft">Search clinics, hospitals, and specialists, filter by distance and specialty, and bookmark the ones you trust.</p>
+      </div>
+
+      <!-- controls -->
+      <div class="reveal bg-white rounded-2xl border border-line p-4 sm:p-5 card-shadow flex flex-col lg:flex-row gap-3 lg:items-center">
+        <div class="relative flex-1">
+          <svg class="absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-soft" width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.3-4.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <input id="locator-search" type="text" placeholder="Search by name, clinic, or hospital…" class="w-full rounded-xl border border-line pl-10 pr-3.5 py-3 text-sm focus:outline-none focus:border-teal" />
+        </div>
+        <select id="locator-specialty" class="rounded-xl border border-line px-3.5 py-3 text-sm bg-white focus:outline-none focus:border-teal">
+          <option value="all">All specialties</option>
+        </select>
+        <div class="flex items-center gap-3 min-w-[220px]">
+          <label for="locator-distance" class="text-sm text-ink-soft whitespace-nowrap">Within <span id="distance-val" class="font-semibold text-ink font-mono">10 mi</span></label>
+          <input id="locator-distance" type="range" min="1" max="25" value="10" class="w-full" />
+        </div>
+        <button id="locator-geo" class="inline-flex items-center gap-2 rounded-xl border-2 border-teal text-teal font-semibold px-4 py-2.5 text-sm hover:bg-teal hover:text-white transition-colors whitespace-nowrap">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M12 2v3M12 19v3M2 12h3M19 12h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/></svg>
+          Use my location
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between mt-6 mb-4">
+        <p id="results-count" class="text-sm font-medium text-ink-soft">Showing results</p>
+        <div role="tablist" aria-label="View mode" class="inline-flex rounded-full bg-white border border-line p-1 text-sm">
+          <button id="view-list-btn" role="tab" aria-selected="true" class="px-4 py-1.5 rounded-full font-medium">List</button>
+          <button id="view-map-btn" role="tab" aria-selected="false" class="px-4 py-1.5 rounded-full font-medium">Map</button>
+        </div>
+      </div>
+
+      <div id="clinic-list" class="grid sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+
+      <div id="clinic-map" class="hidden relative bg-ink rounded-2xl h-[420px] overflow-hidden border border-line">
+        <svg class="absolute inset-0 w-full h-full opacity-[0.15]" aria-hidden="true">
+          <defs><pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" fill="none" stroke="#4FD1C5" stroke-width="0.5"/></pattern></defs>
+          <rect width="100%" height="100%" fill="url(#grid)" />
+        </svg>
+        <div id="map-pins" class="absolute inset-0"></div>
+        <p class="absolute bottom-3 left-4 font-mono text-[11px] text-white/50">Map view is illustrative — pin positions are approximate</p>
+      </div>
+
+      <p id="clinic-empty" class="hidden text-center py-12 text-ink-soft">No results match your filters. Try widening the distance or clearing the search.</p>
+    </div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="dashboard" class="max-w-7xl mx-auto px-5 sm:px-8 py-16 sm:py-20">
+    <div class="reveal max-w-2xl mb-10">
+      <p class="font-mono text-xs tracking-widest text-teal uppercase mb-3">03 — My Dashboard</p>
+      <h2 class="font-display text-3xl sm:text-4xl text-ink font-semibold tracking-tight">Your health, in one place</h2>
+      <p class="mt-3 text-ink-soft">A running record of what you've checked and who you've saved. This is a mock preview — nothing here leaves your session.</p>
+    </div>
+
+    <div class="border-b border-line flex gap-6" role="tablist" aria-label="Dashboard sections">
+      <button id="tab-history" role="tab" aria-selected="true" class="tab-btn pb-3 border-b-2 font-semibold text-sm">Assessment history</button>
+      <button id="tab-bookmarks" role="tab" aria-selected="false" class="tab-btn pb-3 border-b-2 font-semibold text-sm">Bookmarked clinics</button>
+    </div>
+
+    <div id="panel-history" class="pt-6">
+      <div id="history-empty" class="rounded-2xl border-2 border-dashed border-line p-10 text-center">
+        <p class="font-display text-lg text-ink font-medium">No assessments saved yet</p>
+        <p class="mt-1.5 text-sm text-ink-soft">Run a symptom check above and select <span class="font-medium text-ink">Save to history</span> to see it here.</p>
+      </div>
+      <div id="history-list" class="hidden space-y-3"></div>
+    </div>
+
+    <div id="panel-bookmarks" class="hidden pt-6">
+      <div id="bookmarks-empty" class="rounded-2xl border-2 border-dashed border-line p-10 text-center">
+        <p class="font-display text-lg text-ink font-medium">No clinics bookmarked yet</p>
+        <p class="mt-1.5 text-sm text-ink-soft">Tap the bookmark icon on any clinic in the locator to pin it here.</p>
+      </div>
+      <div id="bookmarks-list" class="hidden grid sm:grid-cols-2 gap-4"></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- FOOTER / DATA SECURITY -->
+<footer class="bg-ink text-white/80">
+  <div class="max-w-7xl mx-auto px-5 sm:px-8 py-10">
+    <div class="rounded-2xl bg-white/5 border border-white/10 p-5 flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
+      <div class="flex items-start gap-3">
+        <svg class="mt-0.5 shrink-0 text-[#4FD1C5]" width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2l8 3.5v6c0 5-3.4 8.9-8 10.5-4.6-1.6-8-5.5-8-10.5v-6L12 2z" stroke="currentColor" stroke-width="1.7"/></svg>
+        <p class="text-sm leading-relaxed"><span class="font-semibold text-white">Your data stays protected.</span> Assessment inputs are processed in‑session and follow HIPAA‑aligned handling standards for data in transit and at rest.</p>
+      </div>
+      <a href="#" class="text-sm font-semibold text-[#4FD1C5] whitespace-nowrap hover:underline">Read our privacy practices →</a>
+    </div>
+    <p class="mt-6 text-xs leading-relaxed text-white/50 max-w-3xl">
+      Medical disclaimer: SmartHealth Portal provides general health information and preliminary, non‑diagnostic guidance only. It is not a substitute for professional medical advice, diagnosis, or treatment. Always seek the advice of a physician or other qualified health provider with questions about a medical condition, and call your local emergency number for anything urgent.
+    </p>
+    <div class="mt-8 pt-6 border-t border-white/10 flex flex-col sm:flex-row justify-between gap-3 text-xs text-white/50">
+      <p>© 2026 SmartHealth Portal. Prototype for demonstration purposes.</p>
+      <div class="flex gap-5">
+        <a href="#" class="hover:text-white">Privacy</a>
+        <a href="#" class="hover:text-white">Terms</a>
+        <a href="#" class="hover:text-white">Accessibility</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var els = document.querySelectorAll(".reveal");
+  if(!("IntersectionObserver" in window) || els.length === 0){
+    els.forEach(function(el){ el.classList.add("in-view"); });
+    return;
+  }
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if(entry.isIntersecting){
+        entry.target.classList.add("in-view");
+        io.unobserve(entry.target);
+      }
+    });
+  }, {threshold:0.15, rootMargin:"0px 0px -40px 0px"});
+  els.forEach(function(el){ io.observe(el); });
+})();
+</script>
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- Data ---------------- */
+  const SYMPTOMS = ["Headache","Fever","Cough","Sore throat","Fatigue","Nausea","Runny nose","Body aches","Shortness of breath","Chest pain","Dizziness","Rash","Constipation","Heartburn","Joint pain","Back pain","Insomnia","Nasal congestion","Painful urination"];
+
+  // Sourced from the hospital-directory PDFs (CS_Project_Hospitals_of_Pakistan;
+  // National_Healthcare_Infrastructure_Report). The PDFs list facility name, ownership
+  // "type", and department rosters only — they contain no ratings, review counts, user
+  // distance, or map coordinates. Those four fields (rating/reviews/distance/x,y) are
+  // SYNTHETIC PLACEHOLDERS generated only so the existing UI (star rating, "mi away",
+  // map pins, the 1–25mi distance slider) keeps working, and must be replaced with real
+  // geolocation + ratings-provider data (e.g. via oladoc/Marham/Google Places APIs,
+  // which the PDFs reference) before this ships. See chat notes for detail.
+  const CLINICS = [
+    {id:1, name:"Pakistan Institute of Medical Sciences (PIMS)", type:"Public Hospital", specialty:"General Medicine", departments:["Cardiology","Nephrology","General & Laparoscopic Surgery","Neurosurgery","Obstetrics & Gynecology","Pediatrics"], rating:4.3, reviews:1120, distance:2.1, address:"Islamabad", x:56, y:15},
+    {id:2, name:"Shifa International Hospital — Islamabad", type:"Private Hospital", specialty:"Cardiology", departments:["Organ Transplantation","Cardiology & Cardiac Surgery","Oncology","Neurology & Neurosurgery","Orthopedics","Urology"], rating:4.7, reviews:2140, distance:3.4, address:"Islamabad", x:57, y:14},
+    {id:3, name:"Quaid-e-Azam International Hospital (QIH)", type:"Private Hospital", specialty:"Nephrology", departments:["Cardiology","Cardiac Surgery","Joint Replacement & Orthopedics","Nephrology & Dialysis","Gastroenterology"], rating:4.5, reviews:640, distance:4.0, address:"Islamabad", x:55, y:16},
+    {id:4, name:"Maroof International Hospital", type:"Private Hospital", specialty:"General Medicine", departments:["General Medicine","Surgery","Diagnostics"], rating:4.4, reviews:410, distance:4.6, address:"Islamabad", x:58, y:13},
+    {id:5, name:"Ali Medical Centre", type:"Private Hospital", specialty:"General Medicine", departments:["General Medicine","Outpatient Care","Diagnostics"], rating:4.3, reviews:290, distance:5.2, address:"Islamabad", x:54, y:17},
+    {id:6, name:"PAF Hospital — Islamabad", type:"Military Hospital", specialty:"General Medicine", departments:["General Medicine","General & Laparoscopic Surgery","Gynecology & Obstetrics","Urology","Cardiology","ENT"], rating:4.2, reviews:380, distance:5.8, address:"Islamabad", x:59, y:16},
+    {id:7, name:"Combined Military Hospital (CMH) — Rawalpindi", type:"Military Hospital", specialty:"Orthopedics", departments:["Trauma & Orthopedics","Maxillofacial Surgery","Vascular Surgery","Burn Care","Advanced Radiology"], rating:4.4, reviews:960, distance:6.5, address:"Rawalpindi", x:57, y:18},
+    {id:8, name:"Pak Emirates Military Hospital (PEMH)", type:"Military Hospital", specialty:"Pulmonology", departments:["Multi-disciplinary Intensive Care","Advanced Surgery","Rehabilitation Medicine","Pulmonology"], rating:4.5, reviews:520, distance:6.9, address:"Rawalpindi", x:58, y:19},
+    {id:9, name:"Hearts International Hospital", type:"Private Hospital", specialty:"Cardiology", departments:["Adult Cardiology","Interventional Cardiology","Cardiac Surgery","Gastroenterology","24/7 Emergency"], rating:4.6, reviews:610, distance:7.2, address:"Rawalpindi", x:56, y:20},
+    {id:10, name:"Fauji Foundation Hospital — Rawalpindi", type:"Semi-Private Hospital", specialty:"Oncology", departments:["General Surgery","Pediatrics","Gynecology & Obstetrics","Oncology","Radiotherapy"], rating:4.3, reviews:730, distance:7.8, address:"Rawalpindi", x:59, y:20},
+    {id:11, name:"Aga Khan University Hospital (AKUH)", type:"Private Hospital", specialty:"Oncology", departments:["Comprehensive Oncology","Cardiology & Cardiothoracic Surgery","Neurology","Pediatrics","Obstetrics & Gynecology"], rating:4.8, reviews:3210, distance:16.0, address:"Karachi", x:34, y:86},
+    {id:12, name:"Jinnah Postgraduate Medical Centre (JPMC)", type:"Public Hospital", specialty:"Emergency Medicine", departments:["CyberKnife & Radiation Oncology","Emergency Medicine & Trauma","Chest Medicine","Neurotrauma","Orthopedics"], rating:4.1, reviews:1450, distance:16.6, address:"Karachi", x:35, y:88},
+    {id:13, name:"Dr. Ruth K.M. Pfau Civil Hospital", type:"Public Hospital", specialty:"General Medicine", departments:["Plastic Surgery & Burns","Vascular Surgery","General Medicine","Pediatrics","Infectious Diseases"], rating:4.0, reviews:980, distance:17.2, address:"Karachi", x:33, y:85},
+    {id:14, name:"SIUT (Sindh Institute of Urology and Transplantation)", type:"Public Hospital", specialty:"Nephrology", departments:["Renal Transplantation","Urology","Nephrology","Dialysis","Paediatric Urology"], rating:4.7, reviews:1680, distance:17.8, address:"Karachi", x:36, y:87},
+    {id:15, name:"NICVD (National Institute of Cardiovascular Diseases)", type:"Public Hospital", specialty:"Cardiology", departments:["Adult Cardiology","Pediatric Cardiology","Interventional Cardiology","Electrophysiology","Cardiac Surgery"], rating:4.5, reviews:1890, distance:18.4, address:"Karachi", x:34, y:84},
+    {id:16, name:"South City Hospital", type:"Private Hospital", specialty:"General Medicine", departments:["General Medicine","Surgery","Diagnostics"], rating:4.4, reviews:820, distance:19.0, address:"Karachi", x:37, y:86},
+    {id:17, name:"Dr. Ziauddin Hospital (North Nazimabad)", type:"Private Hospital", specialty:"General Medicine", departments:["General Medicine","Surgery","Diagnostics","Pediatrics"], rating:4.3, reviews:560, distance:19.6, address:"Karachi", x:35, y:83},
+    {id:18, name:"Mayo Hospital", type:"Public Hospital", specialty:"Ophthalmology", departments:["Ophthalmology","Pediatric Surgery","Plastic Surgery","Tuberculosis & Chest Diseases","General Surgery"], rating:4.1, reviews:1340, distance:9.5, address:"Lahore", x:68, y:35},
+    {id:19, name:"Shaukat Khanum Memorial Cancer Hospital", type:"Private Hospital (Non-Profit)", specialty:"Oncology", departments:["Medical Oncology","Pediatric Oncology","Radiation Oncology","Nuclear Medicine","Surgical Oncology"], rating:4.9, reviews:2760, distance:10.1, address:"Lahore", x:70, y:36},
+    {id:20, name:"Pakistan Kidney and Liver Institute (PKLI)", type:"Public Hospital", specialty:"Nephrology", departments:["Hepatology","Hepatobiliary Surgery","Liver Transplantation","Kidney Transplantation","Urology"], rating:4.6, reviews:740, distance:10.6, address:"Lahore", x:67, y:34},
+    {id:21, name:"CMH Lahore", type:"Military Hospital", specialty:"General Surgery", departments:["General Surgery","Cardiology","Neurosurgery","Reconstructive Surgery","Pediatrics"], rating:4.3, reviews:690, distance:11.2, address:"Lahore", x:69, y:37},
+    {id:22, name:"Doctors Hospital", type:"Private Hospital", specialty:"Cardiology", departments:["Cardiology & Cardiac Surgery","Dialysis & Nephrology","Orthopedics","Neurosciences","Gastroenterology"], rating:4.5, reviews:580, distance:11.8, address:"Lahore", x:66, y:33},
+    {id:23, name:"Fatima Memorial Hospital", type:"Private Hospital", specialty:"General Medicine", departments:["General Medicine","Surgery","Obstetrics & Gynecology"], rating:4.2, reviews:470, distance:12.3, address:"Lahore", x:71, y:35},
+    {id:24, name:"Hameed Latif Hospital", type:"Private Hospital", specialty:"General Medicine", departments:["General Medicine","Surgery","Diagnostics"], rating:4.3, reviews:390, distance:12.9, address:"Lahore", x:68, y:38},
+    {id:25, name:"Allied Hospital (PMC)", type:"Public Hospital", specialty:"Cardiology", departments:["General Surgery","Cardiology","Nephrology","Pediatrics","Dermatology","Neurosurgery"], rating:4.0, reviews:610, distance:13.8, address:"Faisalabad", x:55, y:38},
+    {id:26, name:"Faisalabad Institute of Cardiology (FIC)", type:"Public Hospital", specialty:"Cardiology", departments:["Cardiac Surgery","Emergency Cardiology","Angiography","Echo & Non-invasive Cardiology"], rating:4.2, reviews:340, distance:14.4, address:"Faisalabad", x:54, y:39},
+    {id:27, name:"Lady Reading Hospital (LRH)", type:"Public Hospital", specialty:"Emergency Medicine", departments:["Emergency Medicine","Cardiology","Neurosurgery","Pediatrics","Pulmonology","General Surgery"], rating:4.1, reviews:920, distance:20.5, address:"Peshawar", x:35, y:18},
+    {id:28, name:"Civil Hospital Quetta", type:"Public Hospital", specialty:"General Medicine", departments:["General Medicine","General Surgery","Emergency & Trauma","Pediatrics","Gynecology"], rating:4.0, reviews:410, distance:24.0, address:"Quetta", x:20, y:50},
+  ];
+
+  // simple mock rule engine — NOT medical advice, for prototype purposes only
+  const RULES = [
+    {
+      match:["Chest pain"], any:["Shortness of breath","Dizziness"],
+      severity:"high",
+      condition:"Possible cardiac or respiratory concern",
+      note:"Chest pain combined with other symptoms can occasionally signal something urgent.",
+      remedies:["Sit upright and stay calm", "Avoid exertion", "Do not drive yourself"],
+      seekCare:"Seek emergency care immediately or call your local emergency number."
+    },
+    {
+      match:["Shortness of breath"], any:[],
+      severity:"high",
+      condition:"Possible respiratory concern",
+      note:"Difficulty breathing on its own warrants prompt evaluation.",
+      remedies:["Sit upright in a well-ventilated space", "Loosen tight clothing", "Avoid known triggers (smoke, allergens)"],
+      seekCare:"Seek urgent care today, or emergency care if breathing worsens."
+    },
+    {
+      match:["Fever","Cough"], any:["Sore throat","Body aches","Fatigue"],
+      severity:"medium",
+      condition:"Flu-like illness",
+      note:"This pattern is commonly seen with viral infections such as influenza or a common cold.",
+      remedies:["Rest and prioritize sleep", "Stay hydrated with water and electrolytes", "Use acetaminophen or ibuprofen for fever, as directed on the label", "Warm salt-water gargle for throat discomfort"],
+      seekCare:"See a doctor if fever exceeds 103°F (39.4°C), lasts beyond 3 days, or breathing becomes difficult."
+    },
+    {
+      match:["Runny nose","Sore throat"], any:["Cough"],
+      severity:"low",
+      condition:"Common cold",
+      note:"Mild upper-respiratory symptoms typically resolve on their own within a week.",
+      remedies:["Rest and stay hydrated", "Warm fluids like tea with honey", "Saline nasal rinse", "Humidifier at night"],
+      seekCare:"See a doctor if symptoms persist beyond 10 days or worsen suddenly."
+    },
+    {
+      match:["Headache","Nausea"], any:["Dizziness","Fatigue"],
+      severity:"medium",
+      condition:"Possible migraine, tension headache, or dehydration",
+      note:"This combination is common with migraines, tension headaches, or mild dehydration.",
+      remedies:["Rest in a quiet, dark room", "Drink water steadily through the day", "Cold compress on the forehead or neck", "Avoid screens for 30–60 minutes"],
+      seekCare:"See a doctor if this is the 'worst headache of your life' or comes with vision changes or confusion."
+    },
+    {
+      match:["Dizziness"], any:["Nausea","Fatigue"],
+      severity:"medium",
+      condition:"Possible dehydration or inner-ear imbalance",
+      note:"Dizziness with nausea often points to fluid balance or inner-ear causes.",
+      remedies:["Sit or lie down until it passes", "Sip water or an electrolyte drink slowly", "Avoid sudden head movements", "Eat something light if you haven't eaten recently"],
+      seekCare:"See a doctor if dizziness is recurring, sudden, or paired with slurred speech or weakness."
+    },
+    {
+      match:["Rash"], any:["Fever"],
+      severity:"medium",
+      condition:"Possible allergic or infectious rash",
+      note:"A rash with fever can range from a mild allergic reaction to something needing evaluation.",
+      remedies:["Avoid scratching the area", "Cool compress to reduce irritation", "Unscented moisturizer", "Note any new foods, soaps, or medications"],
+      seekCare:"Seek care promptly if the rash spreads quickly, blisters, or is paired with facial swelling."
+    },
+    {
+      match:["Rash"], any:[],
+      severity:"low",
+      condition:"Mild skin irritation",
+      note:"Isolated rashes are often contact irritation or a mild allergic response.",
+      remedies:["Keep the area clean and dry", "Cool compress", "Fragrance-free moisturizer", "Avoid new soaps or fabrics for a few days"],
+      seekCare:"See a doctor if it doesn't improve within a week or starts spreading."
+    },
+    {
+      match:["Fatigue"], any:["Headache","Body aches"],
+      severity:"low",
+      condition:"General fatigue / mild overexertion",
+      note:"Fatigue with mild aches is often linked to sleep, stress, or overexertion.",
+      remedies:["Prioritize 7–9 hours of sleep", "Light stretching or a short walk", "Stay hydrated", "Reduce caffeine late in the day"],
+      seekCare:"See a doctor if fatigue is severe, sudden, or lasts more than two weeks."
+    },
+    {
+      match:["Heartburn"], any:["Nausea"],
+      severity:"low",
+      condition:"Acid reflux / GERD-pattern discomfort",
+      note:"Heartburn is often linked to acid/alkaline imbalance or irregular bile release.",
+      remedies:["1 tsp baking soda in a glass of water (not on a full stomach)", "Avoid caffeine, spicy, or fatty foods for a few days", "Eat smaller, slower meals"],
+      seekCare:"See a doctor if heartburn is frequent, severe, or paired with unexplained weight loss or difficulty swallowing."
+    },
+    {
+      match:["Constipation"], any:[],
+      severity:"low",
+      condition:"Mild constipation",
+      note:"Usually linked to low fiber or fluid intake.",
+      remedies:["Ground flaxseed added to food or water for fiber", "Increase water intake through the day", "Gentle daily movement/walking"],
+      seekCare:"See a doctor if it lasts beyond a week, or comes with severe pain, blood, or vomiting."
+    },
+    {
+      match:["Nausea"], any:["Dizziness","Body aches"],
+      severity:"low",
+      condition:"Mild digestive upset",
+      note:"Nausea without fever is commonly linked to digestive irritation or motion.",
+      remedies:["Ginger tea or candied ginger", "Sip clear fluids slowly", "Rest in a well-ventilated space, avoid strong smells"],
+      seekCare:"See a doctor if nausea persists beyond 2 days, or is paired with severe abdominal pain or repeated vomiting."
+    },
+    {
+      match:["Joint pain"], any:["Body aches"],
+      severity:"low",
+      condition:"Mild joint or muscle inflammation",
+      note:"Often linked to oxidative stress in joint fluid or overuse.",
+      remedies:["Warm or cold compress on the affected joint", "Gentle stretching, avoid overexertion", "Stay hydrated"],
+      seekCare:"See a doctor if a joint is hot, swollen, red, or the pain is sudden and severe."
+    },
+    {
+      match:["Back pain"], any:["Fatigue"],
+      severity:"low",
+      condition:"Muscular back or neck tightness",
+      note:"Commonly linked to muscle tightness rather than a structural injury.",
+      remedies:["Gentle stretching and short walks", "Warm compress on tight muscles", "Avoid heavy lifting until it eases"],
+      seekCare:"See a doctor if pain radiates down a leg, or comes with numbness, weakness, or loss of bladder/bowel control."
+    },
+    {
+      match:["Insomnia"], any:["Fatigue","Headache"],
+      severity:"low",
+      condition:"Sleep disruption / restlessness",
+      note:"Often linked to stress, screen exposure, or an irregular sleep schedule.",
+      remedies:["Keep a consistent sleep/wake schedule", "Reduce screens and caffeine in the evening", "Get some daylight exposure earlier in the day"],
+      seekCare:"See a doctor if poor sleep persists for more than a few weeks or affects daytime function."
+    },
+    {
+      match:["Nasal congestion"], any:["Runny nose","Headache"],
+      severity:"low",
+      condition:"Sinus congestion / allergy-pattern symptoms",
+      note:"Can stem from allergies or sinus inflammation blocking normal drainage.",
+      remedies:["Steam inhalation (keep face well back from hot water to avoid burns)", "Saline nasal rinse", "Stay hydrated"],
+      seekCare:"See a doctor if congestion lasts beyond 10 days, or comes with facial pain, high fever, or thick discolored discharge."
+    },
+    {
+      match:["Painful urination"], any:[],
+      severity:"medium",
+      condition:"Possible urinary tract irritation or infection",
+      note:"Pain with urination can point to a urinary tract infection, which usually needs a clinical test to confirm.",
+      remedies:["Drink plenty of water", "Avoid caffeine and alcohol until seen", "Urinate when needed rather than holding it"],
+      seekCare:"See a doctor promptly for testing and possible treatment — this symptom is not reliably managed with home care alone, especially if fever, back pain, or blood in urine is present."
+    }
+  ];
+
+  const FALLBACK = {
+    severity:"low",
+    condition:"Nonspecific symptoms",
+    note:"Your combination of symptoms doesn't match a strong pattern in this prototype's dataset.",
+    remedies:["Rest and monitor how you feel", "Stay hydrated", "Track any new or worsening symptoms"],
+    seekCare:"See a doctor if symptoms persist beyond a few days or begin to worsen."
+  };
+
+  const SEVERITY_STYLE = {
+    low:{color:"var(--mint)", label:"Low priority", bg:"bg-[#EAF6F1]", text:"text-[#2F7A63]"},
+    medium:{color:"var(--amber)", label:"Monitor closely", bg:"bg-[#FBF1E1]", text:"text-[#8A5E1E]"},
+    high:{color:"var(--coral)", label:"Seek care soon", bg:"bg-[#FBEBEA]", text:"text-[#B23A32]"}
+  };
+
+  /* ---------------- State ---------------- */
+  const state = {
+    selectedSymptoms: new Set(),
+    bookmarks: new Set(),
+    history: [],
+    view: "list"
+  };
+
+  /* ---------------- Symptom chips ---------------- */
+  function renderChips(container, syncTarget){
+    container.innerHTML = "";
+    SYMPTOMS.forEach(sym => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = sym;
+      btn.setAttribute("aria-pressed", state.selectedSymptoms.has(sym) ? "true" : "false");
+      btn.className = "chip text-sm font-medium rounded-full border border-line px-3.5 py-1.5 text-ink-soft";
+      btn.addEventListener("click", () => {
+        if(state.selectedSymptoms.has(sym)) state.selectedSymptoms.delete(sym);
+        else state.selectedSymptoms.add(sym);
+        syncChips();
+      });
+      container.appendChild(btn);
+    });
+  }
+
+  const heroRow = document.getElementById("hero-chip-row");
+  const checkerRow = document.getElementById("symptom-chips");
+  const heroBtn = document.getElementById("hero-continue");
+  const analyzeBtn = document.getElementById("analyze-btn");
+
+  function syncChips(){
+    [heroRow, checkerRow].forEach(container => {
+      Array.from(container.children).forEach(btn => {
+        btn.setAttribute("aria-pressed", state.selectedSymptoms.has(btn.textContent) ? "true" : "false");
+      });
+    });
+    const hasSelection = state.selectedSymptoms.size > 0;
+    heroBtn.disabled = !hasSelection;
+    analyzeBtn.disabled = !hasSelection;
+  }
+
+  renderChips(heroRow);
+  renderChips(checkerRow);
+
+  heroBtn.addEventListener("click", () => {
+    document.getElementById("checker").scrollIntoView({behavior:"smooth", block:"start"});
+  });
+
+  /* ---------------- Analysis ---------------- */
+  function scoreRule(rule, selected){
+    const hasAllMatch = rule.match.every(s => selected.has(s));
+    if(!hasAllMatch) return -1;
+    let score = rule.match.length * 10;
+    if(rule.any && rule.any.length){
+      const anyHit = rule.any.filter(s => selected.has(s)).length;
+      if(anyHit > 0) score += anyHit * 3;
+    }
+    return score;
+  }
+
+  function analyze(){
+    const selected = state.selectedSymptoms;
+    let best = null, bestScore = -1;
+    RULES.forEach(rule => {
+      const s = scoreRule(rule, selected);
+      if(s > bestScore){ bestScore = s; best = rule; }
+    });
+    const result = bestScore > -1 ? best : FALLBACK;
+    renderResult(result, Array.from(selected));
+  }
+
+  function renderResult(result, symptomsUsed){
+    const style = SEVERITY_STYLE[result.severity];
+    const empty = document.getElementById("results-empty");
+    const container = document.getElementById("results-container");
+    empty.classList.add("hidden");
+    container.classList.remove("hidden");
+
+    const ecgPath = {
+      low:"M0 30 L40 30 L50 30 L58 22 L66 30 L340 30",
+      medium:"M0 30 L40 30 L48 12 L56 44 L64 30 L340 30",
+      high:"M0 30 L30 30 L38 6 L46 52 L54 14 L62 30 L340 30"
+    }[result.severity];
+
+    const remediesHtml = result.remedies.map(r => `
+      <li class="flex items-start gap-2.5 text-sm text-ink-soft">
+        <svg class="mt-0.5 shrink-0 text-[var(--mint)]" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>${r}</span>
+      </li>`).join("");
+
+    const timestamp = new Date().toLocaleString(undefined, {month:"short", day:"numeric", hour:"numeric", minute:"2-digit"});
+
+    container.innerHTML = `
+      <div class="bg-white rounded-2xl border border-line p-6 sm:p-7 card-shadow">
+        <div class="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <span class="inline-flex items-center gap-1.5 rounded-full ${style.bg} ${style.text} text-xs font-semibold px-3 py-1">
+              <span class="w-1.5 h-1.5 rounded-full" style="background:${style.color}"></span> ${style.label}
+            </span>
+            <h3 class="font-display text-2xl text-ink font-semibold mt-3">${result.condition}</h3>
+            <p class="mt-1.5 text-sm text-ink-soft max-w-md">${result.note}</p>
+          </div>
+          <div class="ecg-wrap shrink-0 hidden sm:block">
+            <svg width="180" height="60" viewBox="0 0 340 60" fill="none">
+              <path class="ecg-line" d="${ecgPath}" stroke="${style.color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-6 mt-6 pt-6 border-t border-line">
+          <div>
+            <p class="text-xs font-semibold text-ink uppercase tracking-wide mb-3">Safe first steps to try at home</p>
+            <ul class="space-y-2">${remediesHtml}</ul>
+          </div>
+          <div>
+            <p class="text-xs font-semibold text-ink uppercase tracking-wide mb-3">When to seek professional care</p>
+            <div class="rounded-xl ${style.bg} ${style.text} text-sm p-4 leading-relaxed font-medium">${result.seekCare}</div>
+            <p class="mt-3 text-xs text-ink-soft">Based on: ${symptomsUsed.join(", ")}</p>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap gap-3 mt-6 pt-6 border-t border-line">
+          <button id="save-history-btn" class="inline-flex items-center gap-2 rounded-full bg-ink text-white text-sm font-semibold px-4 py-2.5 hover:bg-[var(--teal-deep)] transition-colors">
+            Save to history
+          </button>
+          <a href="#locator" class="inline-flex items-center gap-2 rounded-full border-2 border-line text-ink text-sm font-semibold px-4 py-2.5 hover:border-teal hover:text-teal transition-colors">
+            Find nearby care →
+          </a>
+        </div>
+        <p class="mt-4 text-xs text-ink-soft">Checked ${timestamp} · This is general information, not a medical diagnosis.</p>
+      </div>
+    `;
+
+    document.getElementById("save-history-btn").addEventListener("click", (e) => {
+      state.history.unshift({
+        condition: result.condition, severity: result.severity, symptoms: symptomsUsed.join(", "), time: timestamp
+      });
+      renderHistory();
+      e.target.textContent = "Saved ✓";
+      e.target.disabled = true;
+      e.target.classList.add("opacity-60","cursor-not-allowed");
+    });
+
+    container.scrollIntoView({behavior:"smooth", block:"nearest"});
+  }
+
+  analyzeBtn.addEventListener("click", analyze);
+
+  /* ---------------- Locator ---------------- */
+  const specialtySelect = document.getElementById("locator-specialty");
+  const uniqueSpecialties = Array.from(new Set(CLINICS.map(c => c.specialty))).sort();
+  uniqueSpecialties.forEach(sp => {
+    const opt = document.createElement("option");
+    opt.value = sp; opt.textContent = sp;
+    specialtySelect.appendChild(opt);
+  });
+
+  const searchInput = document.getElementById("locator-search");
+  const distanceInput = document.getElementById("locator-distance");
+  const distanceVal = document.getElementById("distance-val");
+  const clinicList = document.getElementById("clinic-list");
+  const clinicMap = document.getElementById("clinic-map");
+  const mapPins = document.getElementById("map-pins");
+  const clinicEmpty = document.getElementById("clinic-empty");
+  const resultsCount = document.getElementById("results-count");
+
+  function ratingStars(rating){
+    const full = Math.round(rating);
+    let out = "";
+    for(let i=0;i<5;i++){
+      out += `<svg width="13" height="13" viewBox="0 0 24 24" fill="${i<full?'#C68A2E':'#E3E9E8'}"><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.9L12 17.8 5.8 21l1.2-6.9-5-4.9 6.9-1L12 2z"/></svg>`;
+    }
+    return out;
+  }
+
+  function filteredClinics(){
+    const q = searchInput.value.trim().toLowerCase();
+    const specialty = specialtySelect.value;
+    const maxDist = Number(distanceInput.value);
+    return CLINICS.filter(c => {
+      const matchesQ = !q || c.name.toLowerCase().includes(q) || c.specialty.toLowerCase().includes(q);
+      const matchesSpecialty = specialty === "all" || c.specialty === specialty;
+      const matchesDist = c.distance <= maxDist;
+      return matchesQ && matchesSpecialty && matchesDist;
+    }).sort((a,b) => a.distance - b.distance);
+  }
+
+  function clinicCard(c){
+    const bookmarked = state.bookmarks.has(c.id);
+    const div = document.createElement("div");
+    div.className = "bg-white rounded-2xl border border-line p-5 card-shadow flex flex-col";
+    div.innerHTML = `
+      <div class="flex items-start justify-between gap-2">
+        <span class="text-[11px] font-mono uppercase tracking-wide text-teal font-semibold">${c.type}</span>
+        <button aria-pressed="${bookmarked}" aria-label="Bookmark ${c.name}" class="bookmark-btn shrink-0 rounded-full p-1.5 hover:bg-paper2 transition-colors">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="${bookmarked ? 'var(--teal)' : 'none'}" stroke="${bookmarked ? 'var(--teal)' : '#8AA1A6'}" stroke-width="2"><path d="M6 3h12a1 1 0 011 1v17l-7-4-7 4V4a1 1 0 011-1z"/></svg>
+        </button>
+      </div>
+      <h3 class="font-display text-lg text-ink font-semibold mt-2 leading-snug">${c.name}</h3>
+      <p class="text-sm text-ink-soft mt-0.5">${c.specialty} · ${c.address}</p>
+      ${c.departments ? `<p class="text-xs text-ink-soft/80 mt-1 line-clamp-1">${c.departments.slice(0,3).join(", ")}</p>` : ""}
+      <div class="flex items-center gap-1.5 mt-2.5">${ratingStars(c.rating)}<span class="text-xs text-ink-soft ml-1">${c.rating} (${c.reviews})</span></div>
+      <div class="flex items-center justify-between mt-4 pt-4 border-t border-line">
+        <span class="font-mono text-sm text-ink font-semibold">${c.distance} mi away</span>
+        <button class="text-sm font-semibold text-teal hover:underline">View details</button>
+      </div>
+    `;
+    div.querySelector(".bookmark-btn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      if(state.bookmarks.has(c.id)) state.bookmarks.delete(c.id);
+      else state.bookmarks.add(c.id);
+      renderClinics();
+      renderBookmarks();
+    });
+    return div;
+  }
+
+  function renderClinics(){
+    const results = filteredClinics();
+    resultsCount.textContent = `Showing ${results.length} of ${CLINICS.length} results`;
+    clinicList.innerHTML = "";
+    mapPins.innerHTML = "";
+
+    if(results.length === 0){
+      clinicEmpty.classList.remove("hidden");
+      clinicList.classList.add("hidden");
+      clinicMap.classList.add("hidden");
+      return;
+    }
+    clinicEmpty.classList.add("hidden");
+
+    results.forEach(c => clinicList.appendChild(clinicCard(c)));
+
+    results.forEach(c => {
+      const pin = document.createElement("div");
+      pin.style.left = c.x + "%";
+      pin.style.top = c.y + "%";
+      pin.className = "absolute -translate-x-1/2 -translate-y-full group cursor-pointer";
+      pin.innerHTML = `
+        <svg width="26" height="34" viewBox="0 0 26 34" fill="none">
+          <path d="M13 0C5.8 0 0 5.8 0 13c0 9.5 13 21 13 21s13-11.5 13-21C26 5.8 20.2 0 13 0z" fill="#4FD1C5"/>
+          <circle cx="13" cy="13" r="5" fill="#0B3B4F"/>
+        </svg>
+        <div class="opacity-0 group-hover:opacity-100 transition-opacity absolute left-1/2 -translate-x-1/2 -top-2 -translate-y-full bg-white text-ink text-xs rounded-lg px-2.5 py-1.5 whitespace-nowrap shadow-lg pointer-events-none">
+          ${c.name} · ${c.distance}mi
+        </div>`;
+      mapPins.appendChild(pin);
+    });
+
+    applyView();
+  }
+
+  function applyView(){
+    if(state.view === "list"){
+      clinicList.classList.remove("hidden");
+      clinicMap.classList.add("hidden");
+    } else {
+      clinicList.classList.add("hidden");
+      clinicMap.classList.remove("hidden");
+    }
+  }
+
+  searchInput.addEventListener("input", renderClinics);
+  specialtySelect.addEventListener("change", renderClinics);
+  distanceInput.addEventListener("input", () => {
+    distanceVal.textContent = distanceInput.value + " mi";
+    renderClinics();
+  });
+
+  document.getElementById("locator-geo").addEventListener("click", function(btn){
+    const originalHtml = this.innerHTML;
+    this.innerHTML = "Locating…";
+    this.disabled = true;
+    const finish = () => {
+      this.innerHTML = "Location set ✓";
+      setTimeout(() => { this.innerHTML = originalHtml; this.disabled = false; }, 1800);
+      renderClinics();
+    };
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(finish, finish, {timeout:2500});
+    } else {
+      finish();
+    }
+  });
+
+  const viewListBtn = document.getElementById("view-list-btn");
+  const viewMapBtn = document.getElementById("view-map-btn");
+  viewListBtn.addEventListener("click", () => { state.view = "list"; viewListBtn.setAttribute("aria-selected","true"); viewMapBtn.setAttribute("aria-selected","false"); applyView(); });
+  viewMapBtn.addEventListener("click", () => { state.view = "map"; viewMapBtn.setAttribute("aria-selected","true"); viewListBtn.setAttribute("aria-selected","false"); applyView(); });
+
+  [viewListBtn, viewMapBtn].forEach(btn => {
+    btn.addEventListener("click", () => {
+      [viewListBtn, viewMapBtn].forEach(b => {
+        b.classList.toggle("bg-teal", b.getAttribute("aria-selected")==="true");
+        b.classList.toggle("text-white", b.getAttribute("aria-selected")==="true");
+        b.classList.toggle("text-ink-soft", b.getAttribute("aria-selected")==="false");
+      });
+    });
+  });
+  viewListBtn.classList.add("bg-teal","text-white");
+
+  renderClinics();
+
+  /* ---------------- Dashboard ---------------- */
+  const tabHistory = document.getElementById("tab-history");
+  const tabBookmarks = document.getElementById("tab-bookmarks");
+  const panelHistory = document.getElementById("panel-history");
+  const panelBookmarks = document.getElementById("panel-bookmarks");
+
+  tabHistory.addEventListener("click", () => {
+    tabHistory.setAttribute("aria-selected","true"); tabBookmarks.setAttribute("aria-selected","false");
+    panelHistory.classList.remove("hidden"); panelBookmarks.classList.add("hidden");
+  });
+  tabBookmarks.addEventListener("click", () => {
+    tabBookmarks.setAttribute("aria-selected","true"); tabHistory.setAttribute("aria-selected","false");
+    panelBookmarks.classList.remove("hidden"); panelHistory.classList.add("hidden");
+  });
+
+  function renderHistory(){
+    const empty = document.getElementById("history-empty");
+    const list = document.getElementById("history-list");
+    if(state.history.length === 0){
+      empty.classList.remove("hidden"); list.classList.add("hidden");
+      return;
+    }
+    empty.classList.add("hidden"); list.classList.remove("hidden");
+    list.innerHTML = state.history.map(h => {
+      const style = SEVERITY_STYLE[h.severity];
+      return `
+        <div class="bg-white rounded-xl border border-line p-4 flex items-center justify-between gap-4 card-shadow">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${style.color}"></span>
+            <div class="min-w-0">
+              <p class="font-semibold text-ink text-sm truncate">${h.condition}</p>
+              <p class="text-xs text-ink-soft truncate">${h.symptoms}</p>
+            </div>
+          </div>
+          <span class="font-mono text-xs text-ink-soft whitespace-nowrap">${h.time}</span>
+        </div>`;
+    }).join("");
+  }
+
+  function renderBookmarks(){
+    const empty = document.getElementById("bookmarks-empty");
+    const list = document.getElementById("bookmarks-list");
+    const items = CLINICS.filter(c => state.bookmarks.has(c.id));
+    if(items.length === 0){
+      empty.classList.remove("hidden"); list.classList.add("hidden");
+      return;
+    }
+    empty.classList.add("hidden"); list.classList.remove("hidden");
+    list.innerHTML = "";
+    items.forEach(c => list.appendChild(clinicCard(c)));
+  }
+
+  renderHistory();
+  renderBookmarks();
+
+})();
+</script>
+</body>
+</html>
